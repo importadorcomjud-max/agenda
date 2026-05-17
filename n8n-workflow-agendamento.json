@@ -1,0 +1,108 @@
+{
+  "name": "Agendamento LPD3 — MVP Guilherme",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Webhook Agendamento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agendamento",
+        "responseMode": "immediately",
+        "responseData": "allEntries"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Criar Evento Google Calendar",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "value": "importadorcomjud@gmail.com",
+          "mode": "id"
+        },
+        "start": "={{ $json.body.dataHoraInicio }}",
+        "end": "={{ $json.body.dataHoraFim }}",
+        "summary": "=Reunião - {{ $json.body.nome }}",
+        "attendees": {
+          "attendee": [
+            { "email": "={{ $json.body.email }}" },
+            { "email": "={{ $json.body.closerEmail }}" }
+          ]
+        },
+        "additionalFields": {
+          "description": "=Modalidade: {{ $json.body.modalidade }}\nSDR: {{ $json.body.sdr }}\nTelefone: {{ $json.body.telefone }}\nOrigem: {{ $json.body.origem }}\nObservações: {{ $json.body.obs }}",
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolutionKey": "hangoutsMeet"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "",
+          "name": "Google Calendar — importadorcomjud"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Enviar E-mail de Convite",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $('Webhook Agendamento').item.json.body.email }}",
+        "subject": "=✅ Reunião confirmada – {{ $('Webhook Agendamento').item.json.body.data.split('-').reverse().join('/') }} às {{ $('Webhook Agendamento').item.json.body.horario }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:0 auto;\">\n  <h2 style=\"color:#1a56db;\">Reunião confirmada!</h2>\n  <p>Olá, <strong>{{ $('Webhook Agendamento').item.json.body.nome }}</strong>!</p>\n  <p>Sua reunião com nossa equipe está confirmada. Veja os detalhes abaixo:</p>\n  <table style=\"width:100%;border-collapse:collapse;margin:16px 0;\">\n    <tr style=\"background:#f3f4f6;\">\n      <td style=\"padding:10px;font-weight:bold;\">📅 Data</td>\n      <td style=\"padding:10px;\">{{ $('Webhook Agendamento').item.json.body.data.split('-').reverse().join('/') }}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px;font-weight:bold;\">🕐 Horário</td>\n      <td style=\"padding:10px;\">{{ $('Webhook Agendamento').item.json.body.horario }}</td>\n    </tr>\n    <tr style=\"background:#f3f4f6;\">\n      <td style=\"padding:10px;font-weight:bold;\">🖥️ Modalidade</td>\n      <td style=\"padding:10px;\">{{ $('Webhook Agendamento').item.json.body.modalidade }}</td>\n    </tr>\n    <tr>\n      <td style=\"padding:10px;font-weight:bold;\">🔗 Link da Reunião</td>\n      <td style=\"padding:10px;\"><a href=\"{{ $json.hangoutLink }}\" style=\"color:#1a56db;\">Clique aqui para entrar</a></td>\n    </tr>\n  </table>\n  <p style=\"color:#6b7280;font-size:13px;\">O convite do Google Calendar foi enviado para o seu e-mail. Em caso de dúvidas, entre em contato com o SDR responsável.</p>\n</div>",
+        "options": {
+          "ccList": "={{ $('Webhook Agendamento').item.json.body.closerEmail }}"
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail — importadorcomjud"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Agendamento": {
+      "main": [
+        [
+          {
+            "node": "Criar Evento Google Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Evento Google Calendar": {
+      "main": [
+        [
+          {
+            "node": "Enviar E-mail de Convite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

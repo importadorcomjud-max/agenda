@@ -590,6 +590,12 @@
   // ============================================================
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz1NcxrWOKVvHPDeYK_AUiYUjJwnh4ygM4FxwV65A1r7OxYCXvZuW9DJq3e_CgBXX7U/exec';
 
+  const N8N_WEBHOOK_URL = 'https://lpdbadvogados.app.n8n.cloud/webhook/agendamento';
+
+  const CLOSER_EMAILS = {
+    'Guilherme': 'importadorcomjud@gmail.com', // e-mail de teste; trocar para gdiaspicini@gmail.com após validar
+  };
+
   // ============================================================
   // STATE
   // ============================================================
@@ -642,6 +648,42 @@
 
     } catch (e) {
       console.warn('Erro ao gravar na planilha:', e);
+    }
+  }
+
+  // ============================================================
+  // ENVIAR PARA N8N — cria evento no Calendar e envia e-mail de convite
+  // ============================================================
+  async function enviarParaN8N(ag) {
+    if (!N8N_WEBHOOK_URL) return;
+    try {
+      const inicio = ag.data + 'T' + ag.horario + ':00';
+      const [h, m] = ag.horario.split(':').map(Number);
+      const fimTotal = h * 60 + m + 60;
+      const fim = ag.data + 'T' +
+        String(Math.floor(fimTotal / 60)).padStart(2, '0') + ':' +
+        String(fimTotal % 60).padStart(2, '0') + ':00';
+      await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nome           : ag.nome,
+          email          : ag.email   || '',
+          telefone       : ag.tel,
+          closer         : ag.closer,
+          closerEmail    : CLOSER_EMAILS[ag.closer] || '',
+          sdr            : ag.sdr     || '',
+          dataHoraInicio : inicio,
+          dataHoraFim    : fim,
+          data           : ag.data,
+          horario        : ag.horario,
+          modalidade     : ag.modalidade,
+          origem         : ag.origem  || '',
+          obs            : ag.obs     || ''
+        })
+      });
+    } catch (e) {
+      console.warn('n8n webhook error:', e);
     }
   }
 
@@ -735,6 +777,7 @@
     agendamentos.push(ag);
     salvarStorage();
     gravarNaPlanilha(ag);   // envia para a planilha com e-mail incluído
+    enviarParaN8N(ag);      // cria evento no Calendar e envia e-mail de convite
     fecharModal();
     limparFormulario();
     mostrarToast('✓ Agendamento confirmado!');
