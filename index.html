@@ -369,9 +369,43 @@
   .modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 18px; }
   .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
   .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  /* LOGIN */
+  #loginOverlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #loginBox {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px 36px;
+    width: 340px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  #loginBox h2 { font-family: 'DM Serif Display', serif; color: var(--accent); font-size: 1.4rem; }
+  #loginBox p { color: var(--text2); font-size: 0.85rem; }
+  #loginBox input {
+    width: 100%; padding: 10px 14px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 0.95rem;
+  }
+  #loginBox input:focus { outline: none; border-color: var(--accent); }
+  #loginErro { color: var(--red); font-size: 0.82rem; display: none; }
 </style>
 </head>
 <body>
+
+<div id="loginOverlay">
+  <div id="loginBox">
+    <h2>LPD3 — Agenda</h2>
+    <p>Digite a senha para acessar o sistema.</p>
+    <input type="password" id="loginSenha" placeholder="Senha" onkeydown="if(event.key==='Enter') tentarLogin()">
+    <span id="loginErro">Senha incorreta. Tente novamente.</span>
+    <button class="btn-primary" onclick="tentarLogin()">Entrar</button>
+  </div>
+</div>
 
 <header>
   <div class="logo">LPD3 <span>Sistema de Agendamento</span></div>
@@ -429,12 +463,6 @@
           <label>Closer Responsável *</label>
           <select id="reuniaoCloser" onchange="verificarConflito()">
             <option value="">Selecione...</option>
-            <option>Guilherme</option>
-            <option>Cinara</option>
-            <option>Emmanuel</option>
-            <option>Erina</option>
-            <option>Andreia</option>
-            <option>Mariana</option>
           </select>
         </div>
         <div class="field">
@@ -586,15 +614,42 @@
 
 <script>
   // ============================================================
+  // AUTH
+  // ============================================================
+  const SENHA_HASH = 'b1a65f2002a4295ae9e078bea4579bf4a9fbd48298b29b22ab3d0bdffdd5d290';
+
+  async function hashStr(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function tentarLogin() {
+    const input = document.getElementById('loginSenha').value;
+    const h = await hashStr(input);
+    if (h === SENHA_HASH) {
+      sessionStorage.setItem('lpd3_auth', '1');
+      document.getElementById('loginOverlay').remove();
+    } else {
+      document.getElementById('loginErro').style.display = 'block';
+      document.getElementById('loginSenha').value = '';
+      document.getElementById('loginSenha').focus();
+    }
+  }
+
+  if (sessionStorage.getItem('lpd3_auth') !== '1') {
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('loginSenha').focus();
+    });
+  } else {
+    document.getElementById('loginOverlay').remove();
+  }
+
+  // ============================================================
   // CONFIG
   // ============================================================
   const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz1NcxrWOKVvHPDeYK_AUiYUjJwnh4ygM4FxwV65A1r7OxYCXvZuW9DJq3e_CgBXX7U/exec';
 
-  const N8N_WEBHOOK_URL = 'https://lpdbadvogados.app.n8n.cloud/webhook/agendamento';
-
-  const CLOSER_EMAILS = {
-    'Guilherme': 'importadorcomjud@gmail.com', // e-mail de teste; trocar para gdiaspicini@gmail.com após validar
-  };
+  const N8N_WEBHOOK_URL = 'https://itd3.app.n8n.cloud/webhook/agendamento';
 
   // ============================================================
   // STATE
@@ -603,14 +658,13 @@
   let filtroCloser = 'todos';
   let dataAtual = new Date();
   dataAtual.setHours(0, 0, 0, 0);
+  let closersData = [];
 
   const HORARIOS = [
     '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
     '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
     '16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30','20:00'
   ];
-
-  const CLOSERS = ['Guilherme','Cinara','Emmanuel','Erina','Andreia','Mariana'];
 
   function salvarStorage() {
     localStorage.setItem('lpd3_agendamentos', JSON.stringify(agendamentos));
@@ -671,7 +725,7 @@
           email          : ag.email   || '',
           telefone       : ag.tel,
           closer         : ag.closer,
-          closerEmail    : CLOSER_EMAILS[ag.closer] || '',
+          closerEmail    : (closersData.find(c => c.nome === ag.closer) || {}).email || '',
           sdr            : ag.sdr     || '',
           dataHoraInicio : inicio,
           dataHoraFim    : fim,
@@ -898,7 +952,7 @@
     document.getElementById('datePicker').value = dateStr;
 
     const grid = document.getElementById('agendaGrid');
-    grid.innerHTML = CLOSERS.map(closer => {
+    grid.innerHTML = closersData.map(c => c.nome).map(closer => {
       const agsDia  = agendamentos.filter(a => a.closer === closer && a.data === dateStr && a.status !== 'cancelada');
       const ocupados = agsDia.map(a => a.horario);
 
@@ -934,11 +988,31 @@
   }
 
   // ============================================================
+  // CLOSERS — carrega da planilha
+  // ============================================================
+  async function carregarClosers() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?acao=listarClosers');
+      closersData = await res.json();
+      const sel = document.getElementById('reuniaoCloser');
+      closersData.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.nome;
+        opt.textContent = c.nome;
+        sel.appendChild(opt);
+      });
+      renderAgenda();
+    } catch (e) {
+      console.warn('Erro ao carregar closers:', e);
+    }
+  }
+
+  // ============================================================
   // INIT
   // ============================================================
-  renderAgenda();
   atualizarDashboard();
   document.getElementById('reuniaoData').value = new Date().toISOString().split('T')[0];
+  carregarClosers();
 </script>
 </body>
 </html>
